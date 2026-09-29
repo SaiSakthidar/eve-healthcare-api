@@ -93,7 +93,30 @@ From there, create a centre and test, attach a price to that centre, and book a 
 - Add webhook signature verification and a durable outbox pattern.
 - Add CI that runs PostgreSQL and Redis integration tests on every push.
 
-## Tests
+## Test it end to end
+
+With the Compose stack running, this creates a user, configures a centre/test, books an appointment, pays for it, and verifies the final booking state. It requires `jq`.
+
+```bash
+export API=http://localhost:8000
+EMAIL="demo-$(date +%s)@example.com"
+
+curl -s -X POST "$API/auth/signup" -H "Content-Type: application/json" -d "{\"email\":\"$EMAIL\",\"password\":\"password123\"}" >/dev/null
+TOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/x-www-form-urlencoded" --data-urlencode "username=$EMAIL" --data-urlencode "password=password123" | jq -r '.access_token')
+AUTH="Authorization: Bearer $TOKEN"
+
+CENTRE_ID=$(curl -s -X POST "$API/centres" -H "$AUTH" -H "Content-Type: application/json" -d '{"name":"Demo Lab","location":"Bengaluru"}' | jq -r '.id')
+TEST_ID=$(curl -s -X POST "$API/tests" -H "$AUTH" -H "Content-Type: application/json" -d '{"name":"CBC"}' | jq -r '.id')
+curl -s -X POST "$API/centres/$CENTRE_ID/tests" -H "$AUTH" -H "Content-Type: application/json" -d "{\"test_id\":$TEST_ID,\"price\":\"500.00\"}" >/dev/null
+
+BOOKING_ID=$(curl -s -X POST "$API/bookings" -H "$AUTH" -H "Content-Type: application/json" -d "{\"centre_id\":$CENTRE_ID,\"test_id\":$TEST_ID,\"appointment_at\":\"2099-01-01T10:00:00Z\"}" | jq -r '.id')
+curl -s -X POST "$API/payments" -H "$AUTH" -H "Content-Type: application/json" -d "{\"booking_id\":$BOOKING_ID,\"outcome\":\"SUCCESS\"}"
+curl -s "$API/bookings/$BOOKING_ID" -H "$AUTH"
+```
+
+The final booking response should show `"status":"CONFIRMED"`. To check webhook idempotency, send the same `event_id` to `POST /payments/webhook` twice; the second response is `{"status":"already_processed"}`.
+
+## Automated tests
 
 ```bash
 pytest
