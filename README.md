@@ -27,6 +27,8 @@ docker compose up --build
 
 The Compose stack runs the API, PostgreSQL, Redis, and a Celery worker. Webhooks are queued and retried by the worker with exponential backoff.
 
+PostgreSQL is exposed on host port `5433` to avoid conflicts with a local PostgreSQL service; containers continue to use port `5432` internally.
+
 API docs are available at `http://localhost:8000/docs`.
 
 ## Endpoints
@@ -57,5 +59,5 @@ pytest
 Integration tests require a PostgreSQL test database:
 
 ```bash
-TEST_DATABASE_URL=postgresql+psycopg://eve:eve@localhost:5432/eve_test .venv/bin/pytest
+TEST_DATABASE_URL=postgresql+psycopg://eve:eve@localhost:5433/eve_test .venv/bin/pytest
 ```
