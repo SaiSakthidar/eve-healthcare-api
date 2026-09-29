@@ -36,6 +36,20 @@ PostgreSQL is exposed on host port `5433` to avoid conflicts with a local Postgr
 
 Swagger is available at `http://localhost:8000/docs` once the stack is up.
 
+## Engineering extras
+
+In addition to the core assignment flow, this project includes:
+
+- Redis caching for centre and test listings, with cache invalidation after changes.
+- Celery background processing for payment webhooks, with exponential-backoff retries.
+- Docker Compose services for the API, PostgreSQL, Redis, and worker.
+- Swagger/OpenAPI documentation at `/docs` and the raw schema at `/openapi.json`.
+- Unit and PostgreSQL integration tests, plus a documented manual end-to-end smoke test.
+- Structured logs for payment, webhook, cache, and worker activity.
+- Offset/limit pagination for centre, test, and booking listings.
+- Redis-backed rate limits for authentication and webhook routes.
+- Idempotent webhook event handling through unique provider event IDs.
+
 ## What is included
 
 - `POST /auth/signup`
