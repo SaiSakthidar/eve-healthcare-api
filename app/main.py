@@ -16,7 +16,7 @@ from .cache import get_json, invalidate, set_json
 from .config import settings
 from .db import get_db
 from .models import Booking, BookingStatus, CentreTest, DiagnosticCentre, DiagnosticTest, Payment, PaymentStatus, PaymentWebhookEvent, User
-from .schemas import BookingCreate, BookingOut, CentreCreate, CentreOut, CentreTestCreate, PaymentCreate, TestCreate, Token, UserCreate, UserOut, WebhookIn
+from .schemas import BookingCreate, BookingOut, CentreCreate, CentreDetail, CentreOut, CentreTestCreate, CentreTestOut, CentreUpdate, PaymentCreate, TestCreate, TestOut, Token, UserCreate, UserOut, WebhookIn
 from .worker import process_payment_webhook
 
 
@@ -77,15 +77,28 @@ def list_centres(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=1
     return payload
 
 
-@app.get("/centres/{centre_id}", response_model=CentreOut)
+@app.get("/centres/{centre_id}", response_model=CentreDetail)
 def get_centre(centre_id: int, db: Session = Depends(get_db)):
     centre = db.get(DiagnosticCentre, centre_id)
     if not centre:
         raise HTTPException(404, "Centre not found")
+    return CentreDetail(id=centre.id, name=centre.name, location=centre.location, tests=[CentreTestOut(test_id=item.test_id, test_name=item.test.name, price=item.price) for item in centre.tests])
+
+
+@app.put("/centres/{centre_id}", response_model=CentreOut)
+def update_centre(centre_id: int, data: CentreUpdate, db: Session = Depends(get_db), _: User = Depends(current_user)):
+    centre = db.get(DiagnosticCentre, centre_id)
+    if not centre:
+        raise HTTPException(404, "Centre not found")
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(centre, field, value)
+    db.commit()
+    db.refresh(centre)
+    invalidate("centres:")
     return centre
 
 
-@app.post("/tests", status_code=201)
+@app.post("/tests", response_model=TestOut, status_code=201)
 def create_test(data: TestCreate, db: Session = Depends(get_db), _: User = Depends(current_user)):
     test = DiagnosticTest(name=data.name)
     db.add(test)
@@ -99,7 +112,7 @@ def create_test(data: TestCreate, db: Session = Depends(get_db), _: User = Depen
     return {"id": test.id, "name": test.name}
 
 
-@app.get("/tests")
+@app.get("/tests", response_model=list[TestOut])
 def list_tests(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100), db: Session = Depends(get_db)):
     key = f"tests:{offset}:{limit}"
     cached = get_json(key)

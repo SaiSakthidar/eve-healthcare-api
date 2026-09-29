@@ -31,13 +31,33 @@ class CentreOut(CentreCreate):
     id: int
 
 
+class CentreUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    location: str | None = Field(default=None, min_length=1, max_length=255)
+
+
 class TestCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+
+
+class TestOut(TestCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
 
 
 class CentreTestCreate(BaseModel):
     test_id: int
     price: Decimal = Field(gt=0, decimal_places=2)
+
+
+class CentreTestOut(BaseModel):
+    test_id: int
+    test_name: str
+    price: Decimal
+
+
+class CentreDetail(CentreOut):
+    tests: list[CentreTestOut]
 
 
 class BookingCreate(BaseModel):
