@@ -110,11 +110,14 @@ TEST_ID=$(curl -s -X POST "$API/tests" -H "$AUTH" -H "Content-Type: application/
 curl -s -X POST "$API/centres/$CENTRE_ID/tests" -H "$AUTH" -H "Content-Type: application/json" -d "{\"test_id\":$TEST_ID,\"price\":\"500.00\"}" >/dev/null
 
 BOOKING_ID=$(curl -s -X POST "$API/bookings" -H "$AUTH" -H "Content-Type: application/json" -d "{\"centre_id\":$CENTRE_ID,\"test_id\":$TEST_ID,\"appointment_at\":\"2099-01-01T10:00:00Z\"}" | jq -r '.id')
-curl -s -X POST "$API/payments" -H "$AUTH" -H "Content-Type: application/json" -d "{\"booking_id\":$BOOKING_ID,\"outcome\":\"SUCCESS\"}"
+PAYMENT_REF=$(curl -s -X POST "$API/payments" -H "$AUTH" -H "Content-Type: application/json" -d "{\"booking_id\":$BOOKING_ID,\"outcome\":\"SUCCESS\"}" | jq -r '.payment_reference')
+EVENT_ID="event-$(date +%s)"
+curl -s -X POST "$API/payments/webhook" -H "Content-Type: application/json" -d "{\"event_id\":\"$EVENT_ID\",\"provider_reference\":\"$PAYMENT_REF\",\"status\":\"SUCCESS\"}"
+curl -s -X POST "$API/payments/webhook" -H "Content-Type: application/json" -d "{\"event_id\":\"$EVENT_ID\",\"provider_reference\":\"$PAYMENT_REF\",\"status\":\"SUCCESS\"}"
 curl -s "$API/bookings/$BOOKING_ID" -H "$AUTH"
 ```
 
-The final booking response should show `"status":"CONFIRMED"`. To check webhook idempotency, send the same `event_id` to `POST /payments/webhook` twice; the second response is `{"status":"already_processed"}`.
+The responses include `{"status":"queued"}`, then `{"status":"already_processed"}`. The final booking response should show `"status":"CONFIRMED"`.
 
 ## Automated tests
 
