@@ -1,6 +1,10 @@
 # EVE Healthcare API
 
-FastAPI backend for diagnostic test bookings and simulated payments.
+This is my take on the EVE Healthcare backend assignment. It is a small FastAPI service for browsing diagnostic tests, creating bookings, and handling simulated payments without losing consistency when a provider retries a webhook.
+
+I kept the main path deliberately simple, then added the pieces I would expect around it in a real service: PostgreSQL migrations, Redis caching/rate limiting, and a Celery worker for asynchronous webhook handling.
+
+## Quick start
 
 ## Run locally
 
@@ -11,7 +15,7 @@ pip install -e '.[dev]'
 uvicorn app.main:app --reload
 ```
 
-PostgreSQL and Redis are required. Start both with Docker Compose or set the connection variables in `.env`.
+For local development you will need PostgreSQL and Redis. Docker Compose is the easiest route; otherwise set the connection variables in `.env` yourself.
 
 Initialize the schema with:
 
@@ -26,13 +30,13 @@ sudo docker compose up --build -d
 sudo docker compose exec api alembic upgrade head
 ```
 
-The Compose stack runs the API, PostgreSQL, Redis, and a Celery worker. Webhooks are queued and retried by the worker with exponential backoff.
+This starts the API, PostgreSQL, Redis, and a Celery worker. Webhooks are queued first, then processed by the worker with exponential-backoff retries.
 
 PostgreSQL is exposed on host port `5433` to avoid conflicts with a local PostgreSQL service; containers continue to use port `5432` internally.
 
-API docs are available at `http://localhost:8000/docs`.
+Swagger is available at `http://localhost:8000/docs` once the stack is up.
 
-## Endpoints
+## What is included
 
 - `POST /auth/signup`
 - `POST /auth/login`
@@ -52,11 +56,9 @@ API docs are available at `http://localhost:8000/docs`.
 - `GET /payments/{booking_id}`
 - `POST /payments/webhook`
 
-Webhook events are deduplicated by `event_id`.
+Webhook deliveries are deduplicated by `event_id`. Centre/test list responses are cached in Redis, and the authentication/webhook routes are rate limited.
 
-Centre and test list responses are cached in Redis. Authentication and webhook endpoints are rate limited.
-
-## Example flow
+## A quick API flow
 
 ```bash
 export API=http://localhost:8000
@@ -65,9 +67,9 @@ TOKEN=$(curl -s -X POST "$API/auth/login" -H "Content-Type: application/x-www-fo
 AUTH="Authorization: Bearer $TOKEN"
 ```
 
-Use `POST /centres`, `POST /tests`, and `POST /centres/{centre_id}/tests` to configure availability. Then create a booking with a future ISO-8601 `appointment_at`, call `POST /payments` with `SUCCESS` or `FAILED`, and submit provider updates to `POST /payments/webhook` using a unique `event_id`.
+From there, create a centre and test, attach a price to that centre, and book a future appointment. `POST /payments` accepts either `SUCCESS` or `FAILED` so the happy and failure paths are both easy to exercise. For webhooks, send a unique `event_id`; retrying the same event is safe.
 
-## Data model
+## Data model, in plain English
 
 - `users`: authenticated patients, uniquely identified by email.
 - `diagnostic_centres`: centre name and location.
@@ -77,14 +79,14 @@ Use `POST /centres`, `POST /tests`, and `POST /centres/{centre_id}/tests` to con
 - `payments`: one simulated payment per booking with a unique provider reference.
 - `payment_webhook_events`: unique provider event IDs used for idempotency.
 
-## Assumptions
+## Assumptions I made
 
 - Any authenticated user may manage centres and tests for this assignment; production code would add roles.
 - Payment outcomes are deterministic through the request `outcome` field to make success/failure testing repeatable.
 - Webhooks are acknowledged as `queued`; Celery applies the final state asynchronously and retries transient failures.
 - A cancelled booking cannot be changed by a webhook.
 
-## If I had more time
+## What I would do next
 
 - Add user roles and administrative audit trails.
 - Add availability windows and appointment conflict rules.
@@ -103,4 +105,4 @@ Integration tests require a PostgreSQL test database:
 TEST_DATABASE_URL=postgresql+psycopg://eve:eve@localhost:5433/eve_test .venv/bin/pytest
 ```
 
-The suite covers health checks, authentication/booking setup, ownership protection, and webhook idempotency. Manual end-to-end verification has been performed against the Compose stack.
+The suite covers health checks, booking setup, ownership protection, payment failure, cancellation, validation, and webhook idempotency. I also ran the full signup → booking → payment → duplicate-webhook flow against the Compose stack.
