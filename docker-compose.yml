@@ -5,6 +5,11 @@ services:
       POSTGRES_DB: eve
       POSTGRES_USER: eve
       POSTGRES_PASSWORD: eve
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eve -d eve"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
       - "5433:5432"
     volumes:
@@ -14,15 +19,25 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://eve:eve@db:5432/eve
       JWT_SECRET: change-me
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
     ports:
       - "8000:8000"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
   worker:
     build: .
     command: celery -A app.worker.celery_app worker --loglevel=info
@@ -33,7 +48,9 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       JWT_SECRET: change-me
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 volumes:
   postgres_data:
